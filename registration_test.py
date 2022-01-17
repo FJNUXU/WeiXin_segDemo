@@ -1,12 +1,20 @@
 # -*- coding = utf-8 -*-
-# @Time : 2021/7/10 9:44
+# @Time : 2021/8/14 6:31
 # @Author : 阮智霖
-# @File : registration.py
+# @File : registration_test.py
 # @Software: PyCharm
 
 
 import cv2
 import numpy as np
+import face_recognition
+
+
+def cv_show(name, img):
+    cv2.namedWindow(name, cv2.WINDOW_NORMAL)
+    cv2.imshow(name, img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 
 # 7.图像配准结果
@@ -20,13 +28,17 @@ def img_match(ori_img, skew_img):
     # kp1 = detector.detect(orig_image, None)
     # kp2 = detector.detect(skewed_image, None)
     # kp1, des1 = detector.compute(orig_image, kp1)#计算出描述子
-    # kp2, des2 = detector.compute(skewed_image, kp2)
+    # kp2, des2 = detector.compute(skewed_image, kp2)t
 
     # 也可以一步直接同时得到特征点和描述子
     # find the keypoints and descriptors with ORB
 
     kp1, des1 = detector.detectAndCompute(ori_img, None)
+    point1 = cv2.drawKeypoints(ori_img, kp1, None, (255, 0, 0), 4)
+    # cv_show("p1", point1)
     kp2, des2 = detector.detectAndCompute(skew_img, None)
+    point2 = cv2.drawKeypoints(skew_img, kp2, None, (255, 0, 0), 4)
+    # cv_show("p2", point2)
 
     # bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)  # 暴力匹配,True判断交叉验证
     # matches = bf.match(des1, des2)  # 利用匹配器得到相近程度
@@ -45,10 +57,12 @@ def img_match(ori_img, skew_img):
 
     # matches2 = sorted(good, key=lambda x: x.distance)  # 按照描述子之间的距离进行排序
     # cv2.drawMatchesKnn expects list of lists as matches.
-    # img4 = cv2.drawMatches(orig_image, kp1, skewed_image, kp2, matches2[:50],None, flags=2)
+    # img4 = cv2.drawMatches(ori_img, kp1, skew_img, kp2, matches2[:50], None, flags=2)
     # img4 = cv2.drawMatchesKnn(orig_image, kp1, skewed_image, kp2, good[:50],None, flags=2)
     # img4 = cv2.drawMatchesKnn(ori_img, kp1, skew_img, kp2, good, None, flags=2)
     lenofgood = len(good)  # good长度为24
+
+    # cv_show("img4", img4)
 
     des1fromgood = np.ones((lenofgood, 61), dtype=np.uint8)
     # des2fromgood=[]
@@ -102,26 +116,82 @@ def img_match(ori_img, skew_img):
         return im_out
 
 
-def hist_match(src, dst, mask):
-    res = np.zeros_like(dst)
-    # cdf 为累计分布
-    cdf_src = np.zeros((3, 256))
-    cdf_dst = np.zeros((3, 256))
-    cdf_res = np.zeros((3, 256))
-    kw = dict(bins=256, range=(20, 256), normed=True)
-    for ch in range(3):
-        his_src, _ = np.histogram(src[:, :, ch], **kw)
-        hist_dst, _ = np.histogram(dst[:, :, ch], **kw)
-        cdf_src[ch] = np.cumsum(his_src)
-        cdf_dst[ch] = np.cumsum(hist_dst)
-        index = np.searchsorted(cdf_src[ch], cdf_dst[ch], side='left')
-        # print(index)
-        np.clip(index, 0, 255, out=index)
-        print(len(index[dst[:, :, ch]]))
-        res[:, :, ch] = index[dst[:, :, ch]]
-        his_res, _ = np.histogram(res[:, :, ch], **kw)
-        cdf_res[ch] = np.cumsum(his_res)
-    return res, (cdf_src, cdf_dst, cdf_res)
+def resize_and_recongnition(img):
+    height, width = img.shape[:2]  # 放缩
+    ratio = height / 150
+    # print("缩放比例:{}".format(ratio))
+    img = cv2.resize(img, (int(width / ratio), int(height / ratio)), interpolation=cv2.INTER_CUBIC)
+    face_locations = face_recognition.face_locations(img, 1, 'cnn')
+    face_landmarks_list = face_recognition.face_landmarks(img)
+    return face_locations, face_landmarks_list, ratio
+
+
+def resize_face_location(img, ratio):
+    height, width, _ = img.shape
+    img = cv2.resize(img, (int(width / ratio), int(height / ratio)), interpolation=cv2.INTER_CUBIC)
+    face_locations = face_recognition.face_locations(img, 1, 'cnn')
+    return face_locations
+
+
+def face_mark(face_file):
+    img = face_recognition.load_image_file(face_file)
+    face_landmarks_list = face_recognition.face_landmarks(img)
+
+    # print("I found {} face(s) in this photograph.".format(len(face_landmarks_list)))
+    all_point = []
+    for face_landmarks in face_landmarks_list:
+        facical_features = [
+            'chin',
+            'left_eyebrow',
+            'right_eyebrow',
+            'nose_bridge',
+            'nose_tip',
+            'left_eye',
+            'right_eye',
+            'top_lip',
+            'bottom_lip'
+        ]
+
+        for facial_feature in facical_features:
+            # print("The {} in this face has the following points: {}".format(facial_feature, face_landmarks[facial_feature]))
+            # print(type(face_landmarks[facial_feature]))
+            for i in face_landmarks[facial_feature]:
+                all_point.append(i)
+        # print(all_point)
+        all_point = np.array(all_point)
+        # print(all_point)
+        # print("array: ", all_point)
+    height, width = img.shape[:2]  # 放缩
+    ratio = int(height / 150)
+    # print("缩放比例:{}".format(ratio))
+    face_locations = resize_face_location(img, ratio)
+
+    return face_locations, face_landmarks_list, ratio, all_point
+
+
+def point_match(skew_img, point1, point2):
+    H, _ = cv2.findHomography(point2, point1)
+
+    h, w = skew_img.shape[:2]
+
+    img_warp = cv2.warpPerspective(skew_img, H, (w, h))
+
+    return img_warp
+
+
+# img1 = cv2.imread("img/cz_0.jpg")
+# img2 = cv2.imread("img/cz_1.jpg")
+# # match = img_match(img1, img2)
+# # cv_show("match", match)
+# point_1 = face_mark("img/cz_0.jpg")
+# point_2 = face_mark("img/cz_1.jpg")
+#
+# H, _ = cv2.findHomography(point_2, point_1)
+#
+# h, w = img1.shape[:2]
+#
+# im2_warp = cv2.warpPerspective(img2, H, (w, h))
+# cv_show("im2_warp", im2_warp)
 
 
 def mean_std(img1, img2, red2):
@@ -148,21 +218,12 @@ def mean_std(img1, img2, red2):
     img2_lab = cv2.cvtColor(img2, cv2.COLOR_BGR2LAB)
     img2_lab = np.array(img2_lab)
 
-
     def non_zero_mean(a):
         mean = np.nanmean(np.where(np.isclose(a, 0), np.nan, a))
         return mean
 
-    def non_zero_mean_ab(a):
-        mean = np.nanmean(np.where(np.isclose(a, 128), np.nan, a))
-        return mean
-
     def non_zero_std(a):
         std = np.nanstd(np.where(np.isclose(a, 0), np.nan, a))
-        return std
-
-    def non_zero_std_ab(a):
-        std = np.std = np.nanstd(np.where(np.isclose(a, 128), np.nan, a))
         return std
 
     def get_avg_std(image):
@@ -172,11 +233,11 @@ def mean_std(img1, img2, red2):
         img_avg_l = non_zero_mean(image[:, :, 0])
         img_std_l = non_zero_std(image[:, :, 0])
 
-        img_avg_a = non_zero_mean_ab(image[:, :, 1])
-        img_std_a = non_zero_std_ab(image[:, :, 1])
+        img_avg_a = non_zero_mean(image[:, :, 1])
+        img_std_a = non_zero_std(image[:, :, 1])
 
-        img_avg_b = non_zero_mean_ab(image[:, :, 2])
-        img_std_b = non_zero_std_ab(image[:, :, 2])
+        img_avg_b = non_zero_mean(image[:, :, 2])
+        img_std_b = non_zero_std(image[:, :, 2])
 
         avg.append(img_avg_l)
         avg.append(img_avg_a)
@@ -195,11 +256,11 @@ def mean_std(img1, img2, red2):
     #     cv2.destroyAllWindows()
 
     ori_avg, ori_std = get_avg_std(img1_lab)
-    # print("治前均值", ori_avg)
-    # print("治前方差", ori_std)
+    print("治前均值", ori_avg)
+    print("治前方差", ori_std)
     img_avg, img_std = get_avg_std(img2_lab)
-    # print("治后均值", img_avg)
-    # print("治后方差", img_std)
+    print("治后均值", img_avg)
+    print("治后方差", img_std)
 
     # for i in range(0, height):
     #     for j in range(0, width):
@@ -218,6 +279,7 @@ def mean_std(img1, img2, red2):
         # print([np.where(red2_lab[:, :, k] != 0)])
         # print(img_avg[k])
         red2_lab[:, :, k] = (red2_lab[:, :, k] - img_avg[k]) * (ori_std[k] / img_std[k]) + ori_avg[k]
+        print(red2_lab[:, :, k])
         # pos = (pos - img_avg[k]) * (ori_std[k] / img_std[k]) + ori_avg[k]
         # pos = 0 if pos < 0 else pos
         # pos = 255 if pos > 255 else pos
@@ -227,44 +289,23 @@ def mean_std(img1, img2, red2):
     return red_tran
 
 
-def mean_std_ab(img1, img2, red2):
-    # img1 = cv2.imread("chz_0.jpg")
-    # img2 = cv2.imread("chz_3.jpg")
-    #
-    # red1 = cv2.imread("chz_1.jpg")
-    # red2 = cv2.imread("chz_2.jpg")
-    # red1_lab = cv2.cvtColor(red1, cv2.COLOR_BGR2LAB)
-    red2_lab = cv2.cvtColor(red2, cv2.COLOR_BGR2LAB)
-    red2_lab = np.array(red2_lab)  # 把图像转成数组格式img = np.asarray(image)
-    # shape = img_array.shape
-    #
-    # h1, w1, c1 = img1.shape
-    # h2, w2, c2 = img2.shape
-
-    # img1 = cv2.resize(img1, (int(h1 * 0.3), int(w1 * 0.3)))
-    # img2 = cv2.resize(img2, (int(h2 * 0.3), int(w2 * 0.3)))
+def mean_std_2(img1, img2, red2):
+    # red2_lab = cv2.cvtColor(red2, cv2.COLOR_BGR2LAB)
+    # red2_lab = np.array(red2_lab)
 
     height, width, channel = img1.shape
 
-    img1_lab = cv2.cvtColor(img1, cv2.COLOR_BGR2LAB)
-    img1_lab = np.array(img1_lab)
-    img2_lab = cv2.cvtColor(img2, cv2.COLOR_BGR2LAB)
-    img2_lab = np.array(img2_lab)
+    # img1_lab = cv2.cvtColor(img1, cv2.COLOR_BGR2LAB)
+    # img1_lab = np.array(img1_lab)
+    # img2_lab = cv2.cvtColor(img2, cv2.COLOR_BGR2LAB)
+    # img2_lab = np.array(img2_lab)
 
     def non_zero_mean(a):
         mean = np.nanmean(np.where(np.isclose(a, 0), np.nan, a))
         return mean
 
-    def non_zero_mean_ab(a):
-        mean = np.nanmean(np.where(np.isclose(a, 128), np.nan, a))
-        return mean
-
     def non_zero_std(a):
         std = np.nanstd(np.where(np.isclose(a, 0), np.nan, a))
-        return std
-
-    def non_zero_std_ab(a):
-        std = np.std = np.nanstd(np.where(np.isclose(a, 128), np.nan, a))
         return std
 
     def get_avg_std(image):
@@ -274,11 +315,11 @@ def mean_std_ab(img1, img2, red2):
         img_avg_l = non_zero_mean(image[:, :, 0])
         img_std_l = non_zero_std(image[:, :, 0])
 
-        img_avg_a = non_zero_mean_ab(image[:, :, 1])
-        img_std_a = non_zero_std_ab(image[:, :, 1])
+        img_avg_a = non_zero_mean(image[:, :, 1])
+        img_std_a = non_zero_std(image[:, :, 1])
 
-        img_avg_b = non_zero_mean_ab(image[:, :, 2])
-        img_std_b = non_zero_std_ab(image[:, :, 2])
+        img_avg_b = non_zero_mean(image[:, :, 2])
+        img_std_b = non_zero_std(image[:, :, 2])
 
         avg.append(img_avg_l)
         avg.append(img_avg_a)
@@ -296,10 +337,10 @@ def mean_std_ab(img1, img2, red2):
     #     cv2.waitKey(0)
     #     cv2.destroyAllWindows()
 
-    ori_avg, ori_std = get_avg_std(img1_lab)
+    ori_avg, ori_std = get_avg_std(img1)
     # print("治前均值", ori_avg)
     # print("治前方差", ori_std)
-    img_avg, img_std = get_avg_std(img2_lab)
+    img_avg, img_std = get_avg_std(img2)
     # print("治后均值", img_avg)
     # print("治后方差", img_std)
 
@@ -319,16 +360,12 @@ def mean_std_ab(img1, img2, red2):
         # print([np.where(red2_lab[:, :, k] != 0)])
         # print([np.where(red2_lab[:, :, k] != 0)])
         # print(img_avg[k])
-        print("img2_lab", img2_lab[:, :, k])
-        if img2_lab[:, :, k] != (0, 128, 128):
-            img2_lab[:, :, k] = (img2_lab[:, :, k] - img_avg[k]) * (ori_std[k] / img_std[k]) + ori_avg[k]
-            red2_lab[:, :, k] = (red2_lab[:, :, k] - img_avg[k]) * (ori_std[k] / img_std[k]) + ori_avg[k]
-        # pos = (pos - img_avg[k]) * (ori_std[k] / img_std[k]) + ori_avg[k]
-        # pos = 0 if pos < 0 else pos
-        # pos = 255 if pos > 255 else pos
+        # img2_lab[:, :, k] = (img2_lab[:, :, k] - img_avg[k]) * (ori_std[k] / img_std[k]) + ori_avg[k]
 
-    img2_tran = cv2.cvtColor(img2_lab, cv2.COLOR_Lab2BGR)
-    red_tran = cv2.cvtColor(red2_lab, cv2.COLOR_Lab2BGR)
+        red2[:, :, k] = (red2[:, :, k] - img_avg[k]) * (ori_std[k] / img_std[k]) + ori_avg[k]
 
-    return img2_tran, red_tran
+    # lab_tran = cv2.cvtColor(img2_lab, cv2.COLOR_Lab2BGR)
+    red_tran = cv2.cvtColor(red2, cv2.COLOR_Lab2BGR)
+    # res = cv2.bitwise_and(lab_tran, red_tran)
 
+    return red_tran

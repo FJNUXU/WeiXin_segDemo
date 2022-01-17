@@ -27,15 +27,15 @@ def chart(img1, img2, img3):
 
     ws1 = stats.wasserstein_distance(per_3, per_1)
     ws2 = stats.wasserstein_distance(per_3, per_2)
-    # print("治疗前红斑与正常皮肤沃氏距离：", ws1)
-    # print("治疗后红斑与正常皮肤沃氏距离：", ws2)
+    print("治疗前红斑与正常皮肤沃氏距离：", ws1)
+    print("治疗后红斑与正常皮肤沃氏距离：", ws2)
     # print("本次治疗治愈率为：" + str("%.2f" % (abs((ws1 - ws2) / ws1) * 100 / 2)) + "%")
-    effect = str("%.2f" % (abs((ws1 - ws2) / ws1) * 100 *0.6)) + "%"
-
+    effect = str("%.2f" % ((ws1 - ws2) / ws1 * 100 / 2)) + "%"
+    ws1 = float("%.6f" % ws1)
     # len_list = [list_1, list_2, list_3]
     len_list = [per_1, per_2, per_3]
 
-    return len_list, str("%.6f" % ws1), effect
+    return len_list, ws1, effect
 
 
 # 治疗前红斑分区间并统计
@@ -148,3 +148,88 @@ def draw_contour(image, gray):
 # plt.show()
 # print("ws", ws1)
 # print("effect", effect)
+
+
+# 治疗前红斑分区间并统计
+def division_origin_a(self):
+    # img_gray = cv2.cvtColor(self, cv2.COLOR_BGR2GRAY)
+    img_Lab = cv2.cvtColor(self, cv2.COLOR_BGR2Lab)
+    # height, width, _ = img_Lab.shape
+    # L = img_Lab[:, :, 0]
+    # xy = np.where(L >= 20, 1, 0)
+    # img_red_gray = xy * img_gray
+    a = img_Lab[:, :, 1]
+    a_min = 129  # 黑色a值为128,计数需要排除黑色
+    a_max = np.max(a)
+    # print("g_max:", g_max)
+    # print("g_min:", g_min)
+    # g_min = np.min(img_red_gray)
+    interval = np.round((a_max - a_min) / 10)
+    # print("interval:", interval)
+    # img_red_gray = img_red_gray.flatten()
+    img_red_gray = a[np.where(a >= a_min)]
+    index = pd.interval_range(a_min, None, 10, interval)
+    list_origin_red = pd.cut(img_red_gray, index)
+    list_origin_red = list(list_origin_red.value_counts())
+    # for i in range(10):
+    #     list_origin_red.append(
+    #         [dot for dot in img_red_gray if g_min + i * interval < dot < g_min + (i + 1) * interval])
+
+    return list_origin_red, a_min, index
+
+
+# 根据治疗前图片的区间数据来统计治疗后及正常皮肤的区间数据
+def division_after_a(self, a_min, index):
+    after_a = cv2.cvtColor(self, cv2.COLOR_BGR2Lab)
+    # img_red_gray = after_gray.flatten()
+    img_red_gray = after_a[np.where(after_a >= a_min)]
+    list_after_red = pd.cut(img_red_gray, index)
+    list_after_red = list(list_after_red.value_counts())
+
+    return list_after_red
+
+
+def chart_a(red1, red2, normal1, normal2):
+    list_1, g_min, index = division_origin_a(red1)
+    list_2 = division_after_a(red2, g_min, index)
+    list_3 = division_after_a(normal1, g_min, index)
+    list_4 = division_after_a(normal2, g_min, index)
+
+    per_1 = []
+    per_2 = []
+    per_3 = []
+    per_4 = []
+    for i in list_1:
+        percent = i / sum(list_1)
+        per_1.append(percent)
+
+    for i in list_2:
+        percent = i / sum(list_2)
+        per_2.append(percent)
+
+    for i in list_3:
+        percent = i / sum(list_3)
+        per_3.append(percent)
+
+    for i in list_4:
+        percent = i / sum(list_4)
+        per_4.append(percent)
+
+    ws1 = stats.wasserstein_distance(per_3, per_1)
+    ws2 = stats.wasserstein_distance(per_4, per_2)
+    print("治疗前红斑与正常皮肤沃氏距离：", ws1)
+    print("治疗后红斑与正常皮肤沃氏距离：", ws2)
+    # print("本次治疗治愈率为：" + str("%.2f" % (abs((ws1 - ws2) / ws1) * 100 / 2)) + "%")
+    effect = str("%.2f" % ((ws1 - ws2) / ws1 * 100 / 2)) + "%"
+    ws1 = float("%.6f" % ws1)
+    # len_list = [list_1, list_2, list_3]
+    len_list = [per_1, per_2, per_3]
+
+    return len_list, ws1, effect
+
+
+
+
+
+
+

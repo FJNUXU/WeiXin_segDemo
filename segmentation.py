@@ -9,6 +9,38 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+def OTSU(image, Sigma, Th):
+    """
+    大津法【除去图片0值】
+    :param image
+    :param Sigma: -1
+    :param Th: 0
+    :return: Th
+    """
+    image_nonzero = image[image != 0]
+
+    for th in range(int(np.min(image_nonzero)), 256):
+        bg = image_nonzero[image_nonzero <= th]
+        obj = image_nonzero[image_nonzero > th]
+
+        p0 = bg.size / (bg.size + obj.size)
+        p1 = obj.size / (bg.size + obj.size)
+
+        m0 = 0 if bg.size == 0 else bg.mean()
+        m1 = 0 if obj.size == 0 else obj.mean()
+
+        sigma = p0 * p1 * (m0 - m1) ** 2
+
+        if sigma > Sigma:
+            Sigma = sigma
+            Th = th
+
+    print("sigma", Sigma)
+    print("Th", Th)
+
+    return Th
+
+
 def get_A_and_threshold(img_BGR):
     img_LAB = cv2.cvtColor(img_BGR, cv2.COLOR_BGR2LAB)
     # 3、A分量图
@@ -86,7 +118,16 @@ def get_A_and_threshold(img_BGR):
     img_category_maxMean = img_category[idx_maxMean_imgCatg, :, :]  # 均值最大的图像类的图像
     cluster = np.uint8(img_category_maxMean)
     # img_category_maxMean[img_category_maxMean == 0] = min_img_category[idx_maxMean_imgCatg]
+    """
+    自适应分割
+    """
+    # plt.hist(img_category_maxMean[img_category_maxMean != 0].flatten(), np.arange(-0.5, 256, 1), color='g')
+    # plt.show()
+    # Th = OTSU(img_category_maxMean, -1, 0)
+
     ret, res = cv2.threshold(img_category_maxMean, 148, 255, cv2.THRESH_BINARY)
+
+    # ret, res = cv2.threshold(img_category_maxMean, 148, 255, cv2.THRESH_BINARY)
     res = cv2.resize(res, (width, height), interpolation=cv2.INTER_AREA)
     # print("res.shape: ", res.shape)
     # print("res.dtype: ", res.dtype)
