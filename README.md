@@ -1,3 +1,6 @@
+### 编译器运行UI_test_before.py 文件
+### linux服务器运行UI_test_demo_v4.py文件
+
 1.需要的环境，缺哪个库就pip install xxx
 python                               3.6.5
 numpy                               1.19.0
